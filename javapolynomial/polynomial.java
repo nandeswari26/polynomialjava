@@ -1,54 +1,84 @@
-import java.io.FileReader;
+import java.io.*;
 import java.math.BigInteger;
-import java.util.Map;
-import com.google.gson.Gson;
+import java.util.*;
+import java.util.regex.*;
 
 public class PolynomialSecret {
-    
-    public static void main(String[] args) throws Exception {
 
-        Gson gson = new Gson();
-        Map<String, Object> jsonMap = gson.fromJson(new FileReader("testcase2.json"), Map.class);
-
-        Map<String, Double> keys = (Map<String, Double>) jsonMap.get("keys");
-        int k = keys.get("k").intValue();
-
-        // Store x and y values
-        BigInteger[] X = new BigInteger[k];
-        BigInteger[] Y = new BigInteger[k];
-
-        int index = 0;
-        for (int i = 1; i <= k; i++) {
-            Map<String, String> obj = (Map<String, String>) jsonMap.get(String.valueOf(i));
-            int base = Integer.parseInt(obj.get("base"));
-            String value = obj.get("value");
-            X[index] = BigInteger.valueOf(i);
-            Y[index] = new BigInteger(value, base); // Base Conversion
-            index++;
+    static class Point {
+        int x;
+        BigInteger y;
+        Point(int x, BigInteger y) {
+            this.x = x;
+            this.y = y;
         }
-
-        System.out.println("Constant C = " + lagrangeInterpolation(X, Y, k));
     }
 
-    // Lagrange Interpolation to find f(0), the constant term
-    public static BigInteger lagrangeInterpolation(BigInteger[] x, BigInteger[] y, int k) {
+    public static void main(String[] args) throws Exception {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        StringBuilder input = new StringBuilder();
+        String line;
+        while((line = br.readLine()) != null) {
+            input.append(line);
+        }
+
+        String json = input.toString().replaceAll("\\s+", "");
+
+        int k = extract(json, "\"k\":(\\d+)");
+        int highestIndex = findMaxIndex(json);
+
+        List<Point> points = parsePoints(json);
+
+        BigInteger result = compute(points, k, highestIndex);
+
+        System.out.println(result);
+    }
+
+    static int extract(String text, String regex) {
+        Matcher m = Pattern.compile(regex).matcher(text);
+        if(m.find()) return Integer.parseInt(m.group(1));
+        return -1;
+    }
+
+    static int findMaxIndex(String json) {
+        Matcher m = Pattern.compile("\"(\\d+)\"\\:").matcher(json);
+        int max = 0;
+        while(m.find()) max = Math.max(max, Integer.parseInt(m.group(1)));
+        return max;
+    }
+
+    static List<Point> parsePoints(String json) {
+        List<Point> list = new ArrayList<>();
+        Matcher m = Pattern.compile("\"(\\d+)\":\\{\"base\":\"(\\d+)\",\"value\":\"([0-9A-Za-z]+)\"")
+                .matcher(json);
+
+        while(m.find()) {
+            int x = Integer.parseInt(m.group(1));
+            int base = Integer.parseInt(m.group(2));
+            String value = m.group(3);
+            BigInteger y = new BigInteger(value, base);
+            list.add(new Point(x,y));
+        }
+
+        list.sort(Comparator.comparingInt(a -> a.x));
+        return list;
+    }
+
+    static BigInteger compute(List<Point> points, int k, int targetX) {
+        List<Point> used = points.subList(0, k);
         BigInteger result = BigInteger.ZERO;
 
-        for (int i = 0; i < k; i++) {
-            // Numerator and Denominator as BigInteger
-            BigInteger num = BigInteger.ONE;
+        for(int i = 0; i < used.size(); i++){
+            BigInteger num = used.get(i).y;
             BigInteger den = BigInteger.ONE;
 
-            for (int j = 0; j < k; j++) {
-                if (i != j) {
-                    num = num.multiply(x[j].negate());
-                    den = den.multiply(x[i].subtract(x[j]));
+            for(int j = 0; j < used.size(); j++){
+                if(i != j){
+                    num = num.multiply(BigInteger.valueOf(targetX - used.get(j).x));
+                    den = den.multiply(BigInteger.valueOf(used.get(i).x - used.get(j).x));
                 }
             }
-
-            // term = y[i] * (num/den)
-            BigInteger term = y[i].multiply(num).divide(den);
-            result = result.add(term);
+            result = result.add(num.divide(den));
         }
         return result;
     }
